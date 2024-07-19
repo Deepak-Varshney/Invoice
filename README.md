@@ -1,57 +1,122 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/9113740/201498864-2a900c64-d88f-4ed4-b5cf-770bcb57e1f5.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://user-images.githubusercontent.com/9113740/201498152-b171abb8-9225-487a-821c-6ff49ee48579.png">
-</picture>
+To implement date filtering in your `api/invoices/route.js` file in Next.js, you'll need to modify your existing routes to accept date parameters and filter invoices accordingly. Here's how you can adjust your `GET` function to support date filtering and return invoices within a specified date range:
 
-<div align="center"><strong>Next.js 14 Admin Dashboard Starter Template With Shadcn-ui</strong></div>
-<div align="center">Built with the Next.js App Router</div>
-<br />
-<div align="center">
-<a href="https://next-shadcn-dashboard-starter.vercel.app">View Demo</a>
-<span>
-</div>
+### Updated `GET` Function with Date Filtering
 
-## Overview
+```javascript
+import { NextResponse } from "next/server";
+import connectDB from "@/lib/db";
+import InvoiceModel from "@/models/invoiceModel";
+import { startOfMonth, endOfDay } from 'date-fns';
 
-This is a starter template using the following stack:
+export async function GET(request) {
+    try {
+        await connectDB();
 
-- Framework - [Next.js 14](https://nextjs.org/13)
-- Language - [TypeScript](https://www.typescriptlang.org)
-- Styling - [Tailwind CSS](https://tailwindcss.com)
-- Components - [Shadcn-ui](https://ui.shadcn.com)
-- Schema Validations - [Zod](https://zod.dev)
-- State Management - [Zustand](https://zustand-demo.pmnd.rs)
-- Auth - [Auth.js](https://authjs.dev/)
-- File Uploading - [Uploadthing](https://uploadthing.com)
-- Tables - [Tanstack Tables](https://ui.shadcn.com/docs/components/data-table)
-- Forms - [React Hook Form](https://ui.shadcn.com/docs/components/form)
-- Linting - [ESLint](https://eslint.org)
-- Formatting - [Prettier](https://prettier.io)
+        let startDate = startOfMonth(new Date()); // Default to start of current month
+        let endDate = endOfDay(new Date()); // Default to end of current day
 
-_If you are looking for a React admin dashboard starter, here is the [repo](https://github.com/Kiranism/react-shadcn-dashboard-starter)._
+        // Check if startDate and endDate are provided in query parameters
+        if (request.query.startDate && request.query.endDate) {
+            startDate = new Date(request.query.startDate);
+            endDate = new Date(request.query.endDate);
+        }
 
-## Pages
+        // Fetch invoices within the specified date range
+        const invoices = await InvoiceModel.find({
+            issueDate: {
+                $gte: startDate,
+                $lte: endDate
+            }
+        });
 
-| Pages                                                                            | Specifications                                                                                        |
-| :------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------- |
-| [Signup](https://next-shadcn-dashboard-starter.vercel.app/)                      | Authentication with **NextAuth** supports Social logins and email logins(Enter dummy email for demo). |
-| [Dashboard](https://next-shadcn-dashboard-starter.vercel.app/dashboard)          | Cards with recharts graphs for analytics.                                                             |
-| [Users](https://next-shadcn-dashboard-starter.vercel.app/dashboard/user)         | Tanstack tables with user details client side searching, pagination etc                               |
-| [Users/new](https://next-shadcn-dashboard-starter.vercel.app/dashboard/user/new) | A User Form with Uploadthing to support file uploading with dropzone.                                 |
-| [Employee](https://next-shadcn-dashboard-starter.vercel.app/dashboard/employee)  | Tanstack tables with server side searching, pagination etc).                                          |
-| [Profile](https://next-shadcn-dashboard-starter.vercel.app/dashboard/profile)    | Mutistep dynamic forms using react-hook-form and zod for form validation.                             |
-| [Not Found](https://next-shadcn-dashboard-starter.vercel.app/dashboard/notfound) | Not Found Page Added in the root level                                                                |
-| -                                                                                | -                                                                                                     |
+        return NextResponse.json({
+            message: "Invoices fetched successfully",
+            data: invoices
+        }, {
+            status: 200
+        });
 
-## Getting Started
+    } catch (error) {
+        return NextResponse.json({
+            message: "Failed to fetch Invoices",
+            error: error.message
+        }, {
+            status: 500
+        });
+    }
+}
+```
 
-Follow these steps to clone the repository and start the development server:
+### Explanation:
 
-- `git clone https://github.com/Kiranism/next-shadcn-dashboard-starter.git`
-- `npm install`
-- Create a `.env.local` file by copying the example environment file:
-  `cp env.example.txt .env.local`
-- Add the required environment variables to the `.env.local` file.
-- `npm run dev`
+1. **Date Filtering**: 
+   - `startOfMonth(new Date())` and `endOfDay(new Date())` are used from `date-fns` to set default values for `startDate` and `endDate` to cover the current month.
+   - If `startDate` and `endDate` are provided in the query parameters (`request.query.startDate` and `request.query.endDate`), these values override the defaults.
 
-You should now be able to access the application at http://localhost:3000.
+2. **Querying Invoices**: 
+   - The `InvoiceModel.find()` method now includes a `issueDate` query to filter invoices based on the date range specified (`$gte` for greater than or equal to `startDate` and `$lte` for less than or equal to `endDate`).
+
+### Frontend Integration
+
+Ensure your frontend (React component) correctly sends HTTP GET requests to your API route with the appropriate date parameters. Here’s an example of how you might adjust your frontend code:
+
+```javascript
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
+const InvoicesPage = () => {
+    const [startDate, setStartDate] = useState(new Date());
+    const [endDate, setEndDate] = useState(new Date());
+    const [invoices, setInvoices] = useState([]);
+
+    useEffect(() => {
+        fetchInvoices();
+    }, [startDate, endDate]);
+
+    const fetchInvoices = async () => {
+        try {
+            const response = await axios.get(`/api/invoices?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`);
+            setInvoices(response.data.data); // Assuming response.data.data is where invoices are located
+        } catch (error) {
+            console.error('Error fetching invoices:', error);
+        }
+    };
+
+    const handleDateRangeChange = () => {
+        fetchInvoices();
+    };
+
+    return (
+        <div className="container mx-auto mt-4">
+            <div className="flex space-x-4 mb-4">
+                <DatePicker selected={startDate} onChange={date => setStartDate(date)} />
+                <DatePicker selected={endDate} onChange={date => setEndDate(date)} />
+                <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" onClick={handleDateRangeChange}>
+                    Apply Date Range
+                </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+                {invoices.map(invoice => (
+                    <div key={invoice._id} className="border p-4">
+                        <p>Invoice Number: {invoice.invoiceNumber}</p>
+                        <p>Customer: {invoice.customer}</p>
+                        {/* Add more fields as needed */}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+export default InvoicesPage;
+```
+
+### Summary
+
+- **Backend (`api/invoices/route.js`)**: Updated to include date filtering logic using `date-fns` and querying MongoDB accordingly.
+- **Frontend (React Component)**: Sends HTTP GET requests with date parameters to fetch invoices within the specified date range and displays them dynamically.
+
+Make sure your MongoDB schema (`InvoiceModel`) includes an `issueDate` field that stores invoice dates as `Date` objects for accurate querying based on date ranges. Adjust paths (`@/lib/db` and `@/models/invoiceModel`) according to your project's structure and module resolution setup in Next.js.
